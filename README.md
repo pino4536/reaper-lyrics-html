@@ -20,3 +20,11 @@ Lyrics for reaper - suitable for stage use when blocks of lyric are in reaper, e
  # Q&A
 
  For more questions and tutorial please refer to office reaper documentation or just google: 'reaper control surface web'
+
+
+# Change log
+
+2024-08-05
+1. Added playhead to let user know whether reaper is playing
+2. Added lyric tracks detection
+3. Re-design UI
