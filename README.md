@@ -3,11 +3,11 @@ Lyrics for reaper - suitable for stage use when blocks of lyric are in reaper, e
 
 
 # Installation
-1. Open Reaper Perference (Ctrl-P by default)
-2. Category: Control/OSC/web >> Add a new web browser interface >> mode: Web browser interface
-3. Below the drop down menu, click the button "User pages..." to open the user html folder
+1. Open Reaper `Perference` (`Ctrl-P` by default)
+2. Category: `Control/OSC/web` >> `Add` a new web browser interface >> mode: `Web browser interface`
+3. Below the drop down menu, click the button `User pages...` to open the user html folder
 4. Put this project .html file into the folder
-5. Re-open the control surface adding window to reload the drop down menu, the html file should be listed.
+5. **Re-open** the control surface adding window to reload the drop down menu, the html file should be listed.
 
 ** note: it is recommended to use other port number as port 8080 is usually used by other process running web services. You can pick any port from 1-65535 in theory. for instance I use 12345 / 23456 / etc.
 
