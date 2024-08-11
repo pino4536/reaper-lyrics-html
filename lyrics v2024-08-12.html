@@ -1,0 +1,556 @@
+<html>
+<head>
+<title>lyric view</title>
+<meta charset="utf-8" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="viewport" id="viewport-meta" content="" />
+
+<style type="text/css">
+
+.overlay {
+	position: fixed;
+	top: 0;
+	right: 0;
+	background-color: transparent;
+	color:#E80;
+	z-index: 1000; /* Ensure the overlay is on top of other content */
+  cursor: pointer;
+  text-align: right;
+}
+
+.Paused_scrolling {
+	background-color: rgba(255, 0, 0, 0.5);
+	color:#FB1;
+	font-weight: bold; 
+	position: fixed;
+	z-index: 999; /* Ensure the overlay is on top of other content, except true overlay */
+	top: 0;
+	right: 0;
+  cursor: pointer;
+}
+
+body {
+  background-color:#020202;
+  color:#E80;
+  font-family:sans-serif;
+}
+
+#lyrics_block {
+  background-color:#000;
+  color:#fff;
+}
+
+.measure {
+  float:left;
+  line-height:40px;
+  vertical-align:middle;
+  font-size:30px;
+  scroll-behavior: smooth;
+  transition: scroll 2s;
+}
+
+.lyrics {
+  text-align:center;
+  line-height:110px;
+  font-size:100px;
+}
+
+.highlight_stage {
+	color: #FCB;
+}
+
+.highlight_precise {
+	font-weight: bold; 
+	color: #FB1;
+}
+
+
+/* Style for the button */
+.custom-button {
+	background-color: #630; 
+	color: #E80; 
+	font-weight: bold; 
+	padding: 6;
+	border: none;
+	border-radius: 2px;
+	cursor: pointer;
+	margin-right: 6;
+}
+
+/* Styling all inputs */
+input {
+  background-color: #630;
+  color: #E80;
+  accent-color: #E80;
+  border: 0;
+}
+
+/* Style for the unchecked checkbox */
+input[type=checkbox] {
+  cursor: pointer;
+}
+
+input[type=checkbox]:before {
+  border-radius: 3px;
+}
+
+/* Styling all number inputs */
+input[type=number] {
+  background-color: #630;
+  color: #E80;
+}
+
+/* Styling the up and down buttons of all number inputs */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  background-color: #630;
+  color: #E80;
+}
+
+</style>
+
+<script src="main.js"></script>
+
+<script type="text/javascript">
+
+var lyrictrack=1;
+var lyriclines=116;
+
+var playpos="";
+var lyricstr="";
+var lyrics=[];
+var maxlines=0;
+var maxbeats=0;
+
+var config_lines=100;
+var max_lyric_tracks_to_be_detected=10;
+var tracksWithLyrics = new Set();
+
+var scrolling_active = true;
+
+function parse_lyrics(tok) {
+  lyrics=[];
+  maxlines=0;
+  maxbeats=0;
+  var i;
+  for (i=2; i < tok.length-1; i += 2) {
+    var re=/^(\d+)\.(\d+)\.\d+$/.exec(tok[i]);
+    if (re && re.length == 3) {
+      var m=re[1];
+      var b=re[2];
+      if (!lyrics[m]) lyrics[m]=[];
+      if (!lyrics[m][b]) lyrics[m][b]=tok[i+1];
+      else lyrics[m][b] += " "+tok[i+1];
+      maxlines=m;
+      if (b > maxbeats) maxbeats=b;
+    }
+  }
+
+	const checkbox = document.getElementById('is_update_display_precise_mode');
+	if (checkbox.checked) {
+    update_lyrics_for_stage();
+	}
+}
+
+function update_lyrics_for_stage() {
+  var html=""
+  const lyrics_block = document.getElementById("lyrics_block")
+
+  if (maxbeats == 0) {
+    html="<div class=\"lyrics\">(no MIDI lyrics found on track "+lyrictrack+")</div>";
+    lyrics_block.innerHTML=html;
+    return;
+  }
+
+  for (let m=1; m <= maxlines; m++) {
+    var lyrics_this_bar = [];
+    for (var b = 1; b <= maxbeats; b++) {
+      if (lyrics[m] && lyrics[m][b]) {
+        var beat_id = "beat_" + m + "_" + b; // Add ID for each beat
+        lyrics_this_beat = "<span class=\"beat\" id='" + beat_id + "'>" + simple_unescape(lyrics[m][b]).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + "</span>";
+        lyrics_this_bar.push(lyrics_this_beat);
+      }
+    }
+
+    if (lyrics_this_bar.length === 0) continue;
+
+    bar_lyrics_div = "<div class=\"lyrics\">" + lyrics_this_bar.join(" ") + "</div>";
+
+    var measure_id = "measure_" + m; // Add ID for each measure
+    var bar_num_div ="<div id='" + measure_id + "' class=\"measure\">" + m + "</div>";
+    
+    html += bar_num_div + bar_lyrics_div;
+  }
+  lyrics_block.innerHTML=html;
+}
+
+
+var playpos_array = [1,1];
+var playpos_id_m = ""
+var playpos_id_b = ""
+
+function update_display() {
+	// Get the checkbox element
+	const checkbox = document.getElementById('is_update_display_precise_mode');
+
+	if (!checkbox.checked) {
+		update_display_precise_mode();
+	} else {
+    update_display_for_stage();
+	}
+
+  function update_display_for_stage() {
+    var curm = -1;
+    var curb = -1;
+    var re = /^(\d+)\.(\d+)\.\d+$/.exec(playpos);
+    if (re && re.length === 3) {
+      curm = parseInt(re[1]);
+      curb = parseInt(re[2]);
+    }
+
+    if (curm === -1 || curb === -1) return;
+    if (playpos_array.toString() === [curm, curb].toString()) return;
+    playpos_array = [curm, curb];
+
+    // Update beat element by appending class highlight_stage
+    curBeatId = "beat_" + curm + "_" + curb;
+    const beatElement = document.getElementById(curBeatId);
+    if (beatElement) {
+      const beatElement_de_highlight = document.getElementById(playpos_id_b);
+      if (beatElement_de_highlight) beatElement_de_highlight.classList.remove("highlight_stage");
+      beatElement.classList.add("highlight_stage");
+      playpos_id_b = curBeatId;
+    }
+    
+    // Update measure div by appending class highlight_stage
+    curBarId = "measure_" + curm;
+    if (playpos_id_m == curBarId) return;
+    const measureElement = document.getElementById(curBarId);
+    if (measureElement) {
+      const measureElement_de_highlight = document.getElementById(playpos_id_m);
+      if (measureElement_de_highlight) measureElement_de_highlight.classList.remove("highlight_stage");
+      measureElement.classList.add("highlight_stage");
+      playpos_id_m = curBarId;
+      if (scrolling_active) smoothScrollTo(measureElement);
+    }
+  }
+
+  function smoothScrollTo(element, duration=2000) {
+    var targetPosition = element.getBoundingClientRect().top + window.pageYOffset;
+    var startPosition = window.pageYOffset;
+    var distance = targetPosition - startPosition;
+    var startTime = null;
+
+    function animation(currentTime) {
+        if (startTime === null) startTime = currentTime;
+        var timeElapsed = currentTime - startTime;
+        var run = ease(timeElapsed, startPosition, distance, duration);
+        window.scrollTo(0, run);
+        if (timeElapsed < duration) requestAnimationFrame(animation);
+    }
+
+    function ease(t, b, c, d) {
+        t /= d / 2;
+        if (t < 1) return c / 2 * t * t + b;
+        t--;
+        return -c / 2 * (t * (t - 2) - 1) + b;
+    }
+
+    requestAnimationFrame(animation);
+  }
+
+  function update_display_precise_mode() {
+    var html=""
+
+    if (maxbeats == 0) {
+      html="<div class=\"lyrics\">(no MIDI lyrics found on track "+lyrictrack+")</div>";
+    }
+    else {
+      var curm=1, curb=1;
+      var re=/^(\d+)\.(\d+)\.\d+$/.exec(playpos)
+      if (re && re.length == 3) {
+        curm=re[1];
+        curb=re[2];
+      }
+
+      var lines=0;
+      var m=Math.max(curm-lyriclines/4, 1);
+      for (lines=0; lines < lyriclines; ++lines, ++m) {
+        html += "<div class=\"measure\">"+m+"</div>";
+        html += "<div class=\"lyrics\">";
+        var b;
+        for (b=1; b <= maxbeats; ++b) {
+          if (b > 1) html += " ";
+          if (m == curm && b == curb) html += "<span class=\"highlight_precise\">";
+          if (lyrics[m] && lyrics[m][b]) 
+            html += simple_unescape(lyrics[m][b]).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          else html += "&#x2219;";
+          if (m == curm && b == curb) html += "</span>";
+        }
+        html += "</div>";
+      }
+    }
+
+    document.getElementById("lyrics_block").innerHTML=html;
+  }
+
+}
+
+function addTime([bar, beat, tick], addTicks = 0, addBeats = 0, addBars = 0, maxTicks = 100, maxBeats = maxbeats) {
+  let newTick = parseInt(tick) + addTicks;
+  let newBeat = parseInt(beat) + addBeats;
+  let newBar = parseInt(bar) + addBars;
+
+  while (newTick >= maxTicks) {
+      newTick -= maxTicks;
+      newBeat++;
+  };
+
+  while (newBeat > maxBeats) {
+    newBeat -= maxBeats;
+    newBar++;
+  };
+
+  return [newBar.toString(), newBeat.toString(), newTick.toString().padStart(2, '0')];
+}
+
+function latency_compensation(playheadpos, ticks_comp = 20) {
+	if ( maxbeats == 0) return [playheadpos]; // no maxbeats means lyrics has not been loaded, no compensation needed.
+	
+	const [bar, beat, tick] = playheadpos.split('.');
+  const [newBar, newBeat, newTick] = addTime([bar, beat, tick], addTicks=ticks_comp);
+	return  [`${newBar}.${newBeat}.${newTick}`];
+}
+
+function wwr_onreply(results) {
+  var ar=results.split("\n");
+  for (var i=0; i < ar.length; ++i) {
+    var tok=ar[i].split("\t");
+    if (tok && tok.length > 0) {
+      switch (tok[0]) {
+        case "TRANSPORT":
+          if (tok.length > 5) {
+		    let nowplaypos = latency_compensation(tok[5], parseInt(document.getElementById('ticks_to_compensate').value))[0];
+            if (playpos !== nowplaypos) {
+              playpos = nowplaypos;
+              const playhead_time_indicator = document.getElementById("playhead_time_indicator");
+              playhead_time_indicator.innerHTML = (playpos.split('.')[1] === '1' || playpos.split('.')[1] === '3' ? '<u>' + playpos + '</u>' : playpos) + "<BR>[Scroll Lock]";
+              update_display();
+            }
+          }
+        break;
+        case "LYRICS":
+          if (tok.length >= 2) {
+            if (lyricstr !== ar[i]) {
+              if (lyrictrack == tok[1]) {
+                lyricstr=ar[i];
+                parse_lyrics(tok);
+                update_display();
+              }
+			      }
+          }
+	    case "NTRACK":
+	  	  if (tok.length > 1 && tok[1] >= 0) max_lyric_tracks_to_be_detected = parseInt(tok[1]) + 1;
+        break;
+      }
+    }
+  }
+}
+
+wwr_req_recur("TRANSPORT",20);
+wwr_req_recur("LYRICS/" + lyrictrack,2000);
+wwr_req_recur("NTRACK",1000);
+wwr_start();
+
+
+
+
+function updateOrientation() {
+  var a=document.getElementById("viewport-meta");
+  if (a) a.setAttribute("content",
+    "width=320, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0, initial-scale=1.0");
+}
+
+function init()
+{
+  updateOrientation();
+}
+
+function lyrics_config() {
+  var tr=parseInt(prompt("Display MIDI lyrics from track:", lyrictrack));
+  if (tr > 0 && tr != lyrictrack)
+  {
+    wwr_req_recur_cancel("LYRICS/"+lyrictrack);
+    wwr_req_recur("LYRICS/"+tr,2000);
+    lyrictrack=tr;
+    lyricstr="";
+    lyrics=[];
+    update_display();
+  }
+}
+
+function hasLyrics(tok) {
+    if (tok[0] === "LYRICS" && tok.length > 3) {
+        var track = parseInt(tok[1]);
+        // Check if the token indicates that the track has lyrics
+        for (var i = 2; i < tok.length - 1; i += 2) {
+            if (/^\d+\.\d+\.\d+$/.test(tok[i])) {
+				if (tok[i+1].length > 0 ) return true;
+            }
+        }
+    }
+    return false;
+}
+
+
+function detectLyricsTrack() {
+    var originalLyricTrack = lyrictrack;
+	wwr_req_recur_cancel("LYRICS/" + originalLyricTrack);
+	
+    // Create a closure to maintain the value of 'i' for each iteration
+    for (let i = 1; i <= max_lyric_tracks_to_be_detected; i++) {
+        (function(index) {
+            wwr_req_recur_cancel("LYRICS/" + originalLyricTrack);
+            wwr_req_recur("LYRICS/" + index, 50);
+
+            // Make a request to check for lyrics and process them
+            var req = new XMLHttpRequest();
+            req.open("GET", "/_/LYRICS/" + index, true);
+            req.onreadystatechange = function() {
+                if (req.readyState === 4) {
+                    if (req.responseText !== "") {
+                        var check_the_track_for_lyrics = checkLyrics(req.responseText); 
+                        if (check_the_track_for_lyrics != -1) {
+                            tracksWithLyrics.add(check_the_track_for_lyrics);
+                            console.log("tracks_with_lyrics:", check_the_track_for_lyrics);
+                        } else {
+							 tracksWithLyrics.delete(i);
+						}
+                    }
+                }
+            };
+            req.send();
+        })(i);
+    }
+
+    for (i = 1; i <= max_lyric_tracks_to_be_detected; i++) {
+		wwr_req_recur_cancel("LYRICS/" + i);
+	}
+    wwr_req_recur("LYRICS/" + originalLyricTrack, 2000);
+	
+	updateTracksWithLyrics();
+}
+
+// Function to check for lyrics in the response data
+function checkLyrics(results) {
+	var ar=results.split("\n");
+    for (var i = 0; i < ar.length; ++i) {
+        var tok = ar[i].split("\t");
+        if (tok && tok.length > 0 && tok[0] === "LYRICS") {
+            if (tok.length >= 2) {
+                // Validate if the lyrics are valid and contain real lyrics
+                if (hasLyrics(tok)) {
+                    // Process the lyrics data
+                    console.log("Valid lyrics found: ", tok);
+					return parseInt(tok[1])
+                } else {
+					console.log("Track #"+tok[1]+" has no lyrics:", tok.slice(2).join(' '))
+				}
+            }
+        }
+    }
+	return -1
+}
+
+
+function updateTracksWithLyrics() {
+    const tracksDiv = document.getElementById("tracks_with_lyrics");
+	if (tracksWithLyrics.length == 0) {
+		tracksDiv.innerHTML = "NO LYRICS!";
+	} else {
+		tracksDiv.innerHTML = "Select track: ";
+		// Convert the set to an array, sort the array
+		function customSort(a, b) {
+			return a - b;
+		}
+		const sortedTracks = [...tracksWithLyrics].sort(customSort);
+		// Create a button for each track
+		sortedTracks.forEach(track => {
+			const button = document.createElement("button");
+			button.textContent = "TRK " + track;
+			button.addEventListener("click", function() {
+				if (track !== lyrictrack) {
+					wwr_req_recur_cancel("LYRICS/" + lyrictrack);
+					wwr_req_recur("LYRICS/" + track, 2000);
+					lyrictrack = track;
+					lyricstr = "";
+					lyrics = [];
+					update_display();
+				}
+			});
+			// Add the "button-clicked" class to the clicked button
+			button.classList.add("custom-button");
+			tracksDiv.appendChild(button); // Add the button to the container
+		});
+	}
+	periodicDetectLyricsTrack();
+}
+	
+	
+
+let intervalId; // Variable to store the interval ID
+
+// Function to periodically call detectLyricsTrack
+function periodicDetectLyricsTrack() {
+    const intervalTime = tracksWithLyrics.size === 0 ? 300 : 10000;
+    clearInterval(intervalId); // Clear any existing interval
+    intervalId = setInterval(detectLyricsTrack, intervalTime);
+}
+
+// Call the periodicDetectLyricsTrack function
+periodicDetectLyricsTrack();
+
+function toggle_pause_scrolling() {
+  const playhead_time_indicator = document.getElementById("playhead_time_indicator");
+  if (scrolling_active) {
+    scrolling_active = false;
+    playhead_time_indicator.classList.add("Paused_scrolling");
+    document.getElementById("Paused_scrolling").style.display = "";
+  } else {
+    scrolling_active = true;
+    playhead_time_indicator.classList.remove("Paused_scrolling");
+    document.getElementById("Paused_scrolling").style.display = "none";
+  }
+
+}
+
+
+</script>
+
+</head>
+<body onLoad="init()">
+	<div id="lyrics_block" onclick="lyrics_config()">initializing...</div>
+	<BR><BR><BR><p style="text-align: center;">-------- (END) --------</p><BR><BR><BR><hr style="border-color: #630;">
+	
+    <div style="display: flex; justify-content: space-between;">
+      <div>
+        <label>
+          <input class="custom-checkbox" type="checkbox" id="is_update_display_precise_mode" onclick="update_display" checked> Stage mode
+        </label>
+      </div>
+      <div>
+        Latency Compensation: <input type="number" id="ticks_to_compensate" value="20" min="0" max="100" style="width: 70px;"> Ticks
+      </div>
+    </div>
+	<div>
+		<div id="tracks_with_lyrics" onclick="detectLyricsTrack()">[CLICK] to detect more lyric tracks: (no tracks detected)</div>
+	</div>
+  <div class="overlay" id="playhead_time_indicator" onclick="toggle_pause_scrolling()">
+      [time]
+  </div>
+  <div class="Paused_scrolling" id="Paused_scrolling" style="flex: 1; display: none" onclick="toggle_pause_scrolling()">
+    <BR>Auto Scroll Paused!
+  </div>
+</body>
+</html>
